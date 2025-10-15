@@ -11,5 +11,32 @@
       "src": "/(.*)",
       "dest": "src/server.js"
     }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, OPTIONS, HEAD"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Range, Authorization, Accept, Origin, X-Requested-With"
+        },
+        {
+          "key": "Access-Control-Expose-Headers",
+          "value": "Content-Length, Content-Range, Accept-Ranges"
+        },
+        {
+          "key": "Access-Control-Max-Age",
+          "value": "86400"
+        }
+      ]
+    }
   ]
 }
