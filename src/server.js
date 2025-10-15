@@ -52,15 +52,15 @@ app.use((req, res, next) => {
 // Logging middleware
 app.use(morgan('dev'));
 
-// Security headers middleware
+// ✅ Security headers - CSP DESABILITADO PARA COMPATIBILIDADE
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginEmbedderPolicy: false,
+  contentSecurityPolicy: false // Desabilitar CSP que bloqueia scripts
 }));
 
 // Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, '../public')));
-
 // ==========================================
 // HOME PAGE
 // ==========================================
