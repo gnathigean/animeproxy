@@ -10,14 +10,17 @@ const helmet = require('helmet');
 const { cleanEnv, str, num } = require('envalid');
 
 // ==========================================
-// ENVIRONMENT VARIABLES
+// ENVIRONMENT VARIABLES (PRIMEIRO!)
 // ==========================================
 const env = cleanEnv(process.env, {
   PORT: num({ default: 3000 }),
-  ALLOWED_ORIGINS: str({ default: "https://yayanimes.vercel.app,http://localhost:3000" }),
-  REFERER_URL: str({ default: "https://megacloud.club/" })
+  ALLOWED_ORIGINS: str({ default: "*" }), // ✅ Aceitar todos
+  REFERER_URL: str({ default: "https://hianime.to" })
 });
 
+// ==========================================
+// CRIAR APP (SEGUNDO!)
+// ==========================================
 const app = express();
 const PORT = env.PORT;
 
@@ -25,13 +28,31 @@ const PORT = env.PORT;
 const cache = new NodeCache({ stdTTL: 600 });
 
 // ==========================================
-// MIDDLEWARE
+// CORS MIDDLEWARE (TERCEIRO!)
+// ==========================================
+app.use((req, res, next) => {
+  // ✅ CORS SIMPLES E FUNCIONAL
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Range, Authorization, Accept, Origin, X-Requested-With');
+  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
+  res.setHeader('Access-Control-Max-Age', '86400');
+  
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
+  next();
+});
+
+// ==========================================
+// OUTROS MIDDLEWARES
 // ==========================================
 
 // Logging middleware
 app.use(morgan('dev'));
 
-// Security headers middleware - CONFIGURADO PARA PERMITIR YAYANIMES
+// Security headers middleware
 app.use(helmet({
   crossOriginResourcePolicy: { policy: "cross-origin" },
   crossOriginEmbedderPolicy: false,
@@ -39,40 +60,6 @@ app.use(helmet({
 
 // Serve static files from the "public" directory
 app.use(express.static(path.join(__dirname, '../public')));
-
-// ==========================================
-// CORS MIDDLEWARE - OTIMIZADO PARA YAYANIMES ✅
-// ==========================================
-app.use((req, res, next) => {
-  const allowedOrigins = env.ALLOWED_ORIGINS.split(',');
-  const origin = req.headers.origin;
-  
-  // Se a origem estiver na lista permitida, ou se for '*', permite
-  if (origin && (allowedOrigins.includes(origin) || allowedOrigins.includes('*'))) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  } else if (allowedOrigins.includes('*')) {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-  }
-  
-  // Headers CORS necessários para streaming HLS
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, HEAD');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Range, Accept, Origin, X-Requested-With');
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  res.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
-  res.setHeader('Access-Control-Max-Age', '86400'); // 24 horas
-  
-  // Permitir requisições Range (importante para streaming)
-  if (req.headers.range) {
-    res.setHeader('Accept-Ranges', 'bytes');
-  }
-  
-  next();
-});
-
-// Handle CORS preflight requests
-app.options('*', (req, res) => {
-  res.status(204).end();
-});
 
 // ==========================================
 // HOME PAGE
@@ -152,7 +139,7 @@ app.get('/health', (req, res) => {
 });
 
 // ==========================================
-// PROXY ENDPOINT COM CACHE E LOGS
+// PROXY ENDPOINT
 // ==========================================
 app.get('/api/v1/streamingProxy', async (req, res) => {
   try {
@@ -172,7 +159,7 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
       return res.status(400).json({ error: "Invalid URL format" });
     }
 
-    // Check cache for the URL
+    // Check cache
     const cachedResponse = cache.get(url);
     if (cachedResponse) {
       console.log(`✅ Cache HIT: ${url.substring(0, 80)}...`);
@@ -204,28 +191,25 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
       const playlistText = await response.text();
       const modifiedPlaylist = rewritePlaylistUrls(playlistText, url);
 
-      // Cache the response
       cache.set(url, modifiedPlaylist);
       console.log(`💾 Cached M3U8: ${url.substring(0, 80)}...`);
 
       res.set({
         "Content-Type": "application/vnd.apple.mpegurl",
-        "Cache-Control": "public, max-age=600", // 10 minutes
+        "Cache-Control": "public, max-age=600",
         "X-Cache": "MISS"
       });
       return res.send(modifiedPlaylist);
     } else {
-      // Segment (.ts file)
       const arrayBuffer = await response.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
 
-      // Cache the response
       cache.set(url, buffer);
       console.log(`💾 Cached TS segment: ${url.substring(0, 80)}...`);
 
       res.set({
         "Content-Type": "video/mp2t",
-        "Cache-Control": "public, max-age=31536000", // 1 year for segments
+        "Cache-Control": "public, max-age=31536000",
         "X-Cache": "MISS"
       });
       return res.send(buffer);
@@ -241,7 +225,7 @@ app.get('/api/v1/streamingProxy', async (req, res) => {
 });
 
 // ==========================================
-// CACHE STATS ENDPOINT (DEBUG)
+// CACHE STATS
 // ==========================================
 app.get('/api/v1/cache/stats', (req, res) => {
   res.json({
@@ -251,7 +235,7 @@ app.get('/api/v1/cache/stats', (req, res) => {
 });
 
 // ==========================================
-// CLEAR CACHE ENDPOINT (DEBUG)
+// CLEAR CACHE
 // ==========================================
 app.get('/api/v1/cache/clear', (req, res) => {
   cache.flushAll();
@@ -263,7 +247,7 @@ app.get('/api/v1/cache/clear', (req, res) => {
 });
 
 // ==========================================
-// ERROR HANDLING MIDDLEWARE
+// ERROR HANDLING
 // ==========================================
 app.use((err, req, res, next) => {
   console.error('❌ Server error:', err.stack);
@@ -298,7 +282,7 @@ app.listen(PORT, () => {
   console.log('==========================================');
   console.log(`🚀 YayaAnimes Proxy Server`);
   console.log(`📡 Running on: http://localhost:${PORT}`);
-  console.log(`🌐 Allowed origins: ${env.ALLOWED_ORIGINS}`);
+  console.log(`🌐 Allowed origins: *`);
   console.log(`🔗 Proxy endpoint: /api/v1/streamingProxy?url=YOUR_URL`);
   console.log('==========================================');
 });
