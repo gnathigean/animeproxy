@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Streaming Proxy Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+      background: #f5f5f5;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+    }
+    .container {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    #video-container {
+      margin-top: 20px;
+      background: black;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    video {
+      width: 100%;
+      display: block;
+    }
+    .controls {
+      margin: 20px 0;
+    }
+    #url-input {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px 20px;
+      background: #007BFF;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+      width: 100%;
+    }
+    button:hover {
+      background: #0056b3;
+    }
+    #status {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 4px;
+      display: none;
+    }
+    .error {
+      background: #ffebee;
+      color: #c62828;
+      display: block;
+    }
+    .success {
+      background: #e8f5e9;
+      color: #2e7d32;
+      display: block;
+    }
+    .loading {
+      background: #e3f2fd;
+      color: #1565c0;
+      display: block;
+    }
+    footer {
+      margin-top: 20px;
+      text-align: center;
+      font-size: 14px;
+      color: #666;
+    }
+    footer a {
+      color: #007BFF;
+      text-decoration: none;
+    }
+    footer a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Streaming Proxy Test Player</h1>
+    
+    <div class="controls">
+      <input type="text" id="url-input" placeholder="Enter .m3u8 URL (e.g., https://example.com/playlist.m3u8)">
+      <button id="load-btn">Load Stream</button>
+      <div id="status"></div>
+    </div>
+
+    <div id="video-container">
+      <video id="video" controls></video>
+    </div>
+  </div>
+
+  <footer>
+    Made by <a href="https://github.com/metahat" target="_blank" rel="noopener noreferrer">Metahat</a>
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const video = document.getElementById('video');
+      const urlInput = document.getElementById('url-input');
+      const loadBtn = document.getElementById('load-btn');
+      const statusDiv = document.getElementById('status');
+      
+      let hls = null;
+
+      function destroyPlayer() {
+        if (hls) {
+          hls.destroy();
+          hls = null;
+        }
+        video.src = '';
+      }
+
+      function showStatus(message, type = 'info') {
+        statusDiv.textContent = message;
+        statusDiv.className = type;
+        statusDiv.style.display = 'block';
+      }
+
+      function loadStream(url) {
+        destroyPlayer();
+        showStatus('Loading stream...', 'loading');
+        
+        const proxyUrl = `/api/v1/streamingProxy?url=${encodeURIComponent(url)}`;
+        
+        if (Hls.isSupported()) {
+          hls = new Hls({
+            debug: false,
+            xhrSetup: function(xhr) {
+              xhr.setRequestHeader('Referer', 'https://megacloud.club/');
+            }
+          });
+          
+          hls.loadSource(proxyUrl);
+          hls.attachMedia(video);
+          
+          hls.on(Hls.Events.MANIFEST_PARSED, function() {
+            showStatus('Stream loaded successfully!', 'success');
+            video.play().catch(e => {
+              showStatus('Playback error: ' + e.message, 'error');
+            });
+          });
+          
+          hls.on(Hls.Events.ERROR, function(event, data) {
+            if (data.fatal) {
+              let errorMsg = 'Player Error: ';
+              switch(data.type) {
+                case Hls.ErrorTypes.NETWORK_ERROR:
+                  errorMsg += 'Network Error - ' + data.details;
+                  break;
+                case Hls.ErrorTypes.MEDIA_ERROR:
+                  errorMsg += 'Media Error - ' + data.details;
+                  break;
+                default:
+                  errorMsg += data.details || 'Unknown Error';
+              }
+              showStatus(errorMsg, 'error');
+              destroyPlayer();
+            }
+          });
+        } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+          // Fallback for native HLS support (e.g., Safari)
+          video.src = proxyUrl;
+          video.addEventListener('loadedmetadata', function() {
+            showStatus('Stream loaded successfully!', 'success');
+            video.play().catch(e => {
+              showStatus('Playback error: ' + e.message, 'error');
+            });
+          });
+          video.addEventListener('error', function() {
+            showStatus('Error loading stream', 'error');
+          });
+        } else {
+          showStatus('HLS is not supported in this browser', 'error');
+        }
+      }
+
+      loadBtn.addEventListener('click', function() {
+        const url = urlInput.value.trim();
+        if (!url) {
+          showStatus('Please enter a valid URL', 'error');
+          return;
+        }
+        
+        if (!url.endsWith('.m3u8')) {
+          showStatus('Please enter a valid .m3u8 URL', 'error');
+          return;
+        }
+        
+        loadStream(url);
+      });
+
+      // Load test stream by default for quick testing
+      urlInput.value = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+    });
+  </script>
+</body>
+</html>
