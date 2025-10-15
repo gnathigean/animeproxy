@@ -14,8 +14,8 @@ const { cleanEnv, str, num } = require('envalid');
 // ==========================================
 const env = cleanEnv(process.env, {
   PORT: num({ default: 3000 }),
-  ALLOWED_ORIGINS: str({ default: "*" }), // ✅ Aceitar todos
-  REFERER_URL: str({ default: "https://hianime.to" })
+  ALLOWED_ORIGINS: str({ default: "*" }),
+REFERER_URL: str({ default: "https://aniwatch.to" })
 });
 
 // ==========================================
